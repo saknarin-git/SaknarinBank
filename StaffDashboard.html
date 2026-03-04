@@ -596,38 +596,45 @@
     document.addEventListener('keydown', function (e) {
         if (document.getElementById('staff-payment-mode').classList.contains('hidden')) return;
 
-        // ป้องกัน Numpad ลบ ล้างยอด
+        // ป้องกันซ้ำ
+        if (isSubmitting) return;
+
+        // ล้างยอดด้วย Numpad -
         if (e.code === 'NumpadSubtract' || e.code === 'Minus') {
-            e.preventDefault(); clearSessionTotal(); return;
+            e.preventDefault();
+            clearSessionTotal();
+            return;
         }
 
-        if (e.key === 'Enter') {
-            const active = document.activeElement;
-            e.preventDefault();
-            if (isSubmitting) return;
+        if (e.key !== 'Enter') return;
 
-            if (paymentState === "SEARCH" && active.id === "memberNoInput") {
+        e.preventDefault();
+
+        switch (paymentState) {
+            case "SEARCH":
                 searchMember();
-            } else if (paymentState === "SEARCH_MULTI") { // State พิเศษสำหรับเลือกสัญญา
+                break;
+
+            case "SEARCH_MULTI":
                 selectContract(currentContracts[activeContractIndex]);
-            } else if (paymentState === "INTEREST_MODAL") { // State พิเศษสำหรับคำนวณดอกเบี้ย
+                break;
+
+            case "INTEREST_MODAL":
                 let m = document.getElementById('interest-multiplier').value;
                 currentMultiplier = (m === '' || m === null) ? 0 : Number(m);
                 document.getElementById('interest-modal').classList.add('hidden');
-                setTimeout(() => {
-                    preparePaymentRow();
-                }, 150);
-            } else if (paymentState === "LOADED" && (active.id === "principalInput" || active.id === "interestInput")) {
+                preparePaymentRow();
+                break;
+
+            case "LOADED":
+                // ไม่สนว่า focus อยู่ไหน บันทึกได้ทันที
                 savePayment();
-            } else if (paymentState === "PASSBOOK") {
+                break;
+
+            case "PASSBOOK":
                 document.getElementById('passbook-modal').classList.add('hidden');
                 resetPaymentUI();
-            }
-        }
-
-        if (paymentState === "SEARCH_MULTI") {
-            if (e.key === 'ArrowDown') { e.preventDefault(); activeContractIndex = (activeContractIndex + 1) % currentContracts.length; renderContractList(); }
-            else if (e.key === 'ArrowUp') { e.preventDefault(); activeContractIndex = (activeContractIndex - 1 + currentContracts.length) % currentContracts.length; renderContractList(); }
+                break;
         }
     });
 
@@ -714,8 +721,9 @@
         document.getElementById('balance').innerText = selectedContract.balance.toLocaleString('en-US');
 
         let intVal = Math.floor(selectedContract.balance * 0.01 * currentMultiplier);
-        document.getElementById('interestInput').value = intVal;
-        document.getElementById('interestInput').disabled = false;
+        const interestInput = document.getElementById('interestInput');
+        interestInput.value = intVal;
+        interestInput.disabled = false;
 
         document.getElementById('remainingBalance').innerText = selectedContract.balance.toLocaleString('en-US');
 
@@ -723,10 +731,11 @@
         prinInput.disabled = false;
         prinInput.value = '';
 
-        setTimeout(() => {
+        // บังคับ focus แน่นอน
+        requestAnimationFrame(() => {
             prinInput.focus();
             prinInput.select();
-        }, 100);
+        });
     }
 
     function savePayment() {
@@ -734,8 +743,20 @@
         const interest = Number(document.getElementById("interestInput").value) || 0;
 
         if (!selectedContract) return;
+
+        // อนุญาต principal = 0 แต่ห้ามติดลบ
+        if (principal < 0) {
+            Swal.fire({ icon: 'warning', title: 'ผิดพลาด', text: 'จำนวนเงินไม่ถูกต้อง' });
+            return;
+        }
+
         if (principal > selectedContract.balance) {
             Swal.fire({ icon: 'warning', title: 'ผิดพลาด', text: 'ชำระเงินต้นเกินยอดหนี้คงเหลือ', timer: 2500 });
+            return;
+        }
+
+        if (principal === 0 && interest === 0) {
+            Swal.fire({ icon: 'warning', title: 'ไม่มีรายการชำระ', text: 'กรุณาระบุจำนวนเงิน' });
             return;
         }
 
