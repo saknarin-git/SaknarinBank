@@ -545,7 +545,15 @@
     // ส่วนที่ 2: ระบบ POS รับชำระเงิน (Fast Mode)
     // ==========================================
 
-    let paymentState = "SEARCH"; // SEARCH → LOADED
+    const AppState = {
+        SEARCH: 1,
+        SELECT: 2,
+        INTEREST: 3,
+        PAY: 4,
+        SUCCESS: 5
+    };
+
+    let paymentState = AppState.SEARCH;
     let isSubmitting = false;
     let selectedContract = null;
     let currentContracts = [];
@@ -559,7 +567,7 @@
         document.getElementById('staff-payment-mode').classList.remove('hidden');
         refreshRecentTransactions();
         resetPaymentUI();
-        paymentState = "SEARCH";
+        paymentState = AppState.SEARCH;
         setTimeout(() => {
             document.getElementById("memberNoInput").focus();
         }, 200);
@@ -574,7 +582,7 @@
     }
 
     function resetPaymentUI() {
-        paymentState = "SEARCH"; currentContracts = []; selectedContract = null; isSubmitting = false;
+        paymentState = AppState.SEARCH; currentContracts = []; selectedContract = null; isSubmitting = false;
 
         const memberInput = document.getElementById('memberNoInput');
         memberInput.value = ''; memberInput.disabled = false;
@@ -611,27 +619,27 @@
         e.preventDefault();
 
         switch (paymentState) {
-            case "SEARCH":
+            case AppState.SEARCH:
                 searchMember();
                 break;
 
-            case "SEARCH_MULTI":
+            case AppState.SELECT:
                 selectContract(currentContracts[activeContractIndex]);
                 break;
 
-            case "INTEREST_MODAL":
+            case AppState.INTEREST:
                 let m = document.getElementById('interest-multiplier').value;
                 currentMultiplier = (m === '' || m === null) ? 0 : Number(m);
                 document.getElementById('interest-modal').classList.add('hidden');
                 preparePaymentRow();
                 break;
 
-            case "LOADED":
+            case AppState.PAY:
                 // ไม่สนว่า focus อยู่ไหน บันทึกได้ทันที
                 savePayment();
                 break;
 
-            case "PASSBOOK":
+            case AppState.SUCCESS:
                 document.getElementById('passbook-modal').classList.add('hidden');
                 resetPaymentUI();
                 break;
@@ -640,7 +648,7 @@
 
     // --- คำนวณหนี้คงเหลือ ---
     function updateRemaining() {
-        if (paymentState !== "LOADED" || !selectedContract) return;
+        if (paymentState !== AppState.PAY || !selectedContract) return;
         let prin = Number(document.getElementById('principalInput').value) || 0;
         let remBal = selectedContract.balance - prin;
         if (remBal < 0) remBal = 0;
@@ -670,7 +678,7 @@
 
                 currentContracts = res.contracts;
                 if (currentContracts.length > 1) {
-                    paymentState = "SEARCH_MULTI"; activeContractIndex = 0;
+                    paymentState = AppState.SELECT; activeContractIndex = 0;
                     document.getElementById('multi-contract-modal').classList.remove('hidden');
                     renderContractList();
                 } else {
@@ -706,7 +714,7 @@
         document.getElementById("balance").innerText = selectedContract.balance.toLocaleString();
 
         if (contract.missedMonths > 0) {
-            paymentState = "INTEREST_MODAL";
+            paymentState = AppState.INTEREST;
             document.getElementById('interest-msg').innerText = `ระบบพบรายการขาดส่ง (ค่าเริ่มต้น ${contract.missedMonths} เดือน)`;
             document.getElementById('interest-multiplier').value = contract.missedMonths;
             document.getElementById('interest-modal').classList.remove('hidden');
@@ -717,7 +725,7 @@
     }
 
     function preparePaymentRow() {
-        paymentState = "LOADED";
+        paymentState = AppState.PAY;
         document.getElementById('balance').innerText = selectedContract.balance.toLocaleString('en-US');
 
         let intVal = Math.floor(selectedContract.balance * 0.01 * currentMultiplier);
@@ -792,7 +800,7 @@
                 addSessionItem(principal + interest);
                 refreshRecentTransactions();
 
-                paymentState = "PASSBOOK";
+                paymentState = AppState.SUCCESS;
                 document.getElementById('pb-name').innerText = `ชื่อ: ${selectedContract.fullName} (รหัส: ${selectedContract.memberNo})`;
                 document.getElementById('pb-date').innerText = res.passbook.date;
                 document.getElementById('pb-prin').innerText = res.passbook.principal.toLocaleString('en-US');
