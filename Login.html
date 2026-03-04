@@ -1,0 +1,235 @@
+<div id="login-view" class="app-view w-full max-w-md bg-white rounded-2xl shadow-xl overflow-hidden mx-auto mt-10">
+
+    <div class="bank-gradient p-6 text-center text-white">
+        <i class="fa-solid fa-shield-halved text-5xl mb-3 shadow-sm rounded-full bg-white/20 p-4"></i>
+        <h2 class="text-2xl font-bold tracking-wide" id="form-title">เข้าสู่ระบบ</h2>
+        <p class="text-sm opacity-90 mt-1" id="form-subtitle">Saknarin Secure Banking</p>
+    </div>
+
+    <div class="p-8">
+
+        <form id="form-login" onsubmit="handleLogin(event)">
+            <div class="mb-4">
+                <label class="block text-gray-700 text-sm font-bold mb-2">ชื่อผู้ใช้งาน (Username)</label>
+                <div class="relative">
+                    <i class="fa-solid fa-user absolute left-3 top-3.5 text-gray-400"></i>
+                    <input type="text" id="log-username" required
+                        class="w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-shadow">
+                </div>
+            </div>
+            <div class="mb-6">
+                <label class="block text-gray-700 text-sm font-bold mb-2">รหัสผ่าน (Password)</label>
+                <div class="relative">
+                    <i class="fa-solid fa-lock absolute left-3 top-3.5 text-gray-400"></i>
+                    <input type="password" id="log-password" required
+                        class="w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-shadow">
+                </div>
+                <div class="text-right mt-2">
+                    <a href="javascript:void(0);" onclick="toggleForms('forgot')"
+                        class="text-sm text-blue-600 hover:text-blue-800 font-medium transition-colors">ลืมรหัสผ่าน?</a>
+                </div>
+            </div>
+            <button type="submit"
+                class="w-full bank-gradient text-white font-bold py-3 px-4 rounded-lg hover:opacity-90 transition-opacity shadow-lg text-lg">
+                เข้าสู่ระบบ
+            </button>
+            <div class="text-center mt-6 pt-4 border-t border-gray-100">
+                <span class="text-gray-600 text-sm">ยังไม่มีบัญชี?</span>
+                <a href="javascript:void(0);" onclick="toggleForms('register')"
+                    class="text-sm font-bold text-blue-600 hover:text-blue-800 ml-1 transition-colors">สมัครสมาชิก</a>
+            </div>
+        </form>
+
+        <form id="form-register" class="hidden" onsubmit="handleRegister(event)">
+            <div class="mb-4">
+                <label class="block text-gray-700 text-sm font-bold mb-2">ชื่อผู้ใช้งาน</label>
+                <input type="text" id="reg-username" required
+                    class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-shadow">
+            </div>
+            <div class="mb-4">
+                <label class="block text-gray-700 text-sm font-bold mb-2">อีเมล (สำหรับรับ OTP)</label>
+                <input type="email" id="reg-email" required
+                    class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-shadow">
+            </div>
+            <div class="mb-6">
+                <label class="block text-gray-700 text-sm font-bold mb-2">รหัสผ่าน</label>
+                <input type="password" id="reg-password" required
+                    class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-shadow">
+            </div>
+            <button type="submit"
+                class="w-full bank-gradient text-white font-bold py-3 px-4 rounded-lg hover:opacity-90 transition-opacity shadow-lg">
+                ยืนยันการสมัคร
+            </button>
+            <div class="text-center mt-6 pt-4 border-t border-gray-100">
+                <a href="javascript:void(0);" onclick="toggleForms('login')"
+                    class="text-sm text-gray-500 hover:text-gray-800 font-medium transition-colors"><i
+                        class="fa-solid fa-arrow-left mr-1"></i> กลับไปหน้าเข้าสู่ระบบ</a>
+            </div>
+        </form>
+
+        <form id="form-forgot" class="hidden" onsubmit="handleRequestOTP(event)">
+            <div class="bg-blue-50 text-blue-800 text-sm p-4 rounded-lg mb-6 border border-blue-100">
+                <i class="fa-solid fa-circle-info mr-2"></i> กรุณากรอกอีเมลที่ลงทะเบียนไว้ ระบบจะส่งรหัส OTP 6
+                หลักไปให้คุณเพื่อใช้ตั้งรหัสผ่านใหม่
+            </div>
+            <div class="mb-6">
+                <label class="block text-gray-700 text-sm font-bold mb-2">อีเมลของคุณ</label>
+                <input type="email" id="forgot-email" required
+                    class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-shadow">
+            </div>
+            <button type="submit"
+                class="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700 transition-colors shadow-md">
+                ขอรับรหัส OTP
+            </button>
+            <div class="text-center mt-6 pt-4 border-t border-gray-100">
+                <a href="javascript:void(0);" onclick="toggleForms('login')"
+                    class="text-sm text-gray-500 hover:text-gray-800 font-medium transition-colors"><i
+                        class="fa-solid fa-arrow-left mr-1"></i> ยกเลิกและกลับไปหน้าล็อกอิน</a>
+            </div>
+        </form>
+
+        <form id="form-reset" class="hidden" onsubmit="handleResetPassword(event)">
+            <div class="mb-5">
+                <label class="block text-gray-700 text-sm font-bold mb-2">รหัส OTP (6 หลัก)</label>
+                <input type="text" id="reset-otp" required maxlength="6"
+                    class="w-full px-4 py-3 border-2 border-blue-300 rounded-lg text-center text-3xl tracking-widest font-bold focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 bg-blue-50">
+                <p class="text-xs text-gray-500 text-center mt-2">ตรวจสอบรหัสในกล่องข้อความอีเมลของคุณ</p>
+            </div>
+            <div class="mb-6">
+                <label class="block text-gray-700 text-sm font-bold mb-2">รหัสผ่านใหม่</label>
+                <input type="password" id="reset-new-password" required
+                    class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-200 transition-shadow">
+            </div>
+            <button type="submit"
+                class="w-full bg-green-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-green-700 transition-colors shadow-lg">
+                เปลี่ยนรหัสผ่าน
+            </button>
+        </form>
+
+    </div>
+</div>
+
+<script>
+    // ฟังก์ชันสลับฟอร์มภายในหน้าต่างล็อกอิน
+    function toggleForms(formType) {
+        document.getElementById('form-login').classList.add('hidden');
+        document.getElementById('form-register').classList.add('hidden');
+        document.getElementById('form-forgot').classList.add('hidden');
+        document.getElementById('form-reset').classList.add('hidden');
+
+        const title = document.getElementById('form-title');
+        const subtitle = document.getElementById('form-subtitle');
+
+        if (formType === 'login') {
+            document.getElementById('form-login').classList.remove('hidden');
+            title.innerText = 'เข้าสู่ระบบ';
+            subtitle.innerText = 'Saknarin Secure Banking';
+        } else if (formType === 'register') {
+            document.getElementById('form-register').classList.remove('hidden');
+            title.innerText = 'สมัครสมาชิก';
+            subtitle.innerText = 'เปิดบัญชีผู้ใช้ใหม่';
+        } else if (formType === 'forgot') {
+            document.getElementById('form-forgot').classList.remove('hidden');
+            title.innerText = 'ลืมรหัสผ่าน';
+            subtitle.innerText = 'รีเซ็ตรหัสผ่านด้วยอีเมล';
+        } else if (formType === 'reset') {
+            document.getElementById('form-reset').classList.remove('hidden');
+            title.innerText = 'ตั้งรหัสผ่านใหม่';
+            subtitle.innerText = 'กรุณากรอก OTP ที่ได้รับ';
+        }
+    }
+
+    // --- ฟังก์ชันติดต่อกับ Backend (GAS) ---
+
+    // 1. กดเข้าสู่ระบบ
+    function handleLogin(e) {
+        e.preventDefault();
+        const user = document.getElementById('log-username').value;
+        const pass = document.getElementById('log-password').value;
+
+        showLoading('กำลังตรวจสอบข้อมูลเข้าสู่ระบบ...');
+        google.script.run.withSuccessHandler(res => {
+            closeLoading();
+            if (res.success) {
+                // บันทึกข้อมูล Session ปัจจุบัน
+                currentUser = res.user;
+                currentToken = res.token;
+                localStorage.setItem('saknarin_session', JSON.stringify({ user: res.user, token: res.token })); // บันทึก Session ลง LocalStorage
+
+                // อัปเดต UI แถบเมนูด้านบน
+                document.getElementById('nav-user-info').classList.remove('hidden-view');
+                document.getElementById('nav-username').innerText = currentUser.username + ' (' + currentUser.role + ')';
+
+                Toast.fire({ icon: 'success', title: 'ยินดีต้อนรับ ' + currentUser.username });
+
+                // ดึงฟังก์ชันมาจาก Index.html เพื่อแยกเส้นทางตามสิทธิ์ (Admin / Staff / Member)
+                routeUserBasedOnRole();
+
+                // เคลียร์ฟอร์ม
+                document.getElementById('form-login').reset();
+            } else {
+                Swal.fire({ icon: 'error', title: 'เข้าสู่ระบบไม่สำเร็จ', text: res.message });
+            }
+        }).loginUser(user, pass);
+    }
+
+    // 2. กดสมัครสมาชิก
+    function handleRegister(e) {
+        e.preventDefault();
+        const user = document.getElementById('reg-username').value;
+        const email = document.getElementById('reg-email').value;
+        const pass = document.getElementById('reg-password').value;
+
+        showLoading('กำลังสร้างบัญชี...');
+        google.script.run.withSuccessHandler(res => {
+            closeLoading();
+            if (res.success) {
+                Swal.fire({ icon: 'success', title: 'สำเร็จ!', text: res.message });
+                toggleForms('login');
+                document.getElementById('form-register').reset();
+            } else {
+                Swal.fire({ icon: 'error', title: 'ไม่สามารถสมัครได้', text: res.message });
+            }
+        }).registerUser(user, pass, email);
+    }
+
+    // 3. ตัวแปรเก็บอีเมลตอนขอ OTP ไว้ใช้ตอนกดยืนยันรหัส
+    let tempEmailForReset = '';
+
+    // 4. กดขอ OTP
+    function handleRequestOTP(e) {
+        e.preventDefault();
+        tempEmailForReset = document.getElementById('forgot-email').value;
+
+        showLoading('กำลังส่ง OTP ไปยังอีเมล...');
+        google.script.run.withSuccessHandler(res => {
+            closeLoading();
+            if (res.success) {
+                Swal.fire({ icon: 'success', title: 'ส่ง OTP สำเร็จ', text: 'กรุณาตรวจสอบกล่องจดหมาย หรือโฟลเดอร์จดหมายขยะ' });
+                toggleForms('reset');
+            } else {
+                Swal.fire({ icon: 'error', title: 'ข้อผิดพลาด', text: res.message });
+            }
+        }).generateAndSendOTP(tempEmailForReset);
+    }
+
+    // 5. กดยืนยัน OTP เพื่อเปลี่ยนรหัส
+    function handleResetPassword(e) {
+        e.preventDefault();
+        const otp = document.getElementById('reset-otp').value;
+        const newPass = document.getElementById('reset-new-password').value;
+
+        showLoading('กำลังตรวจสอบ OTP...');
+        google.script.run.withSuccessHandler(res => {
+            closeLoading();
+            if (res.success) {
+                Swal.fire({ icon: 'success', title: 'สำเร็จ!', text: res.message });
+                toggleForms('login');
+                document.getElementById('form-forgot').reset();
+                document.getElementById('form-reset').reset();
+            } else {
+                Swal.fire({ icon: 'error', title: 'ข้อมูลไม่ถูกต้อง', text: res.message });
+            }
+        }).verifyOTPAndResetPassword(tempEmailForReset, otp, newPass);
+    }
+</script>

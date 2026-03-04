@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="th">
+
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Saknarin Bank</title>
+
+  <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+  <style>
+    body {
+      font-family: 'Prompt', sans-serif;
+      background-color: #f3f4f6;
+      /* สีพื้นหลังเทาอ่อนๆ */
+    }
+
+    .bank-gradient {
+      background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
+      /* สีน้ำเงินธนาคาร */
+    }
+
+    /* ซ่อนเนื้อหาที่ยังไม่ต้องการให้แสดง */
+    .hidden-view {
+      display: none !important;
+    }
+
+    @media print {
+
+      nav,
+      .no-print {
+        display: none !important;
+      }
+
+      body {
+        background-color: #ffffff !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+
+      .app-view {
+        margin: 0 !important;
+        padding: 0 !important;
+        max-width: 100% !important;
+        box-shadow: none !important;
+        border: none !important;
+      }
+    }
+  </style>
+
+  <script>
+    // ตัวแปรเก็บข้อมูล User และ Token ที่ล็อกอินแล้ว
+    let currentUser = null;
+    let currentToken = null;
+
+    // ฟังก์ชันสลับหน้าต่าง (SPA Routing)
+    function showView(viewId) {
+      // ซ่อนทุกหน้าก่อน
+      document.querySelectorAll('.app-view').forEach(el => el.classList.add('hidden-view'));
+      // แสดงเฉพาะหน้าที่ต้องการ
+      const targetView = document.getElementById(viewId);
+      if (targetView) {
+        targetView.classList.remove('hidden-view');
+      }
+    }
+
+    // ฟังก์ชันสำหรับแจ้งเตือนมุมขวาบน (Toast)
+    const Toast = Swal.mixin({
+      toast: true,
+      position: 'top-end',
+      showConfirmButton: false,
+      timer: 3000,
+      timerProgressBar: true
+    });
+
+    // ฟังก์ชันแสดง Popup โหลดดิ้ง
+    function showLoading(text = 'กำลังประมวลผล...') {
+      Swal.fire({
+        title: text,
+        allowOutsideClick: false,
+        didOpen: () => {
+          Swal.showLoading();
+        }
+      });
+    }
+
+    // ฟังก์ชันปิด Popup โหลดดิ้ง
+    function closeLoading() {
+      Swal.close();
+    }
+  </script>
+</head>
+
+<body class="min-h-screen flex flex-col">
+
+  <nav class="bank-gradient text-white shadow-lg sticky top-0 z-40">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <div class="flex items-center">
+          <i class="fa-solid fa-building-columns text-2xl mr-3"></i>
+          <span class="font-bold text-xl tracking-wider">SAKNARIN</span>
+        </div>
+        <div id="nav-user-info" class="hidden-view flex items-center gap-4">
+          <span id="nav-username" class="text-sm font-medium"></span>
+          <button onclick="logout()"
+            class="text-sm bg-white text-blue-900 px-4 py-1.5 rounded-full hover:bg-gray-200 transition font-bold shadow-sm">
+            <i class="fa-solid fa-right-from-bracket mr-1"></i> ออกจากระบบ
+          </button>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="flex-grow flex items-center justify-center p-4 relative">
+
+    <?!= include('Login'); ?>
+    <?!= include('AdminDashboard'); ?>
+    <?!= include('StaffDashboard'); ?>
+
+    <div id="member-view" class="app-view hidden-view w-full max-w-4xl mx-auto mt-8">
+      <div class="bg-white rounded-xl shadow-md p-8 text-center border-t-8 border-blue-500">
+        <i class="fa-solid fa-user-check text-6xl text-blue-500 mb-4"></i>
+        <h2 class="text-3xl font-bold text-gray-800 mb-2" id="welcome-msg">ยินดีต้อนรับเข้าสู่ระบบ</h2>
+        <p class="text-gray-600">นี่คือพื้นที่ของสมาชิก (กำลังเตรียมการพัฒนาในขั้นตอนต่อไป...)</p>
+      </div>
+    </div>
+
+  </main>
+
+  <script>
+    // เริ่มต้นแสดงหน้า Login เมื่อโหลดเว็บเสร็จ
+    window.onload = () => {
+      const savedSession = localStorage.getItem('saknarin_session');
+      if (savedSession) {
+        try {
+          const sessionData = JSON.parse(savedSession);
+          currentUser = sessionData.user;
+          currentToken = sessionData.token;
+
+          if (!currentUser || !currentToken) throw new Error("Invalid session format");
+
+          document.getElementById('nav-user-info').classList.remove('hidden-view');
+          document.getElementById('nav-username').innerText = currentUser.username + ' (' + currentUser.role + ')';
+          routeUserBasedOnRole();
+        } catch (e) {
+          console.error('Session parse error:', e);
+          localStorage.removeItem('saknarin_session');
+          showView('login-view');
+        }
+      } else {
+        showView('login-view');
+      }
+    };
+
+    // ฟังก์ชันออกจากระบบ
+    function logout() {
+      currentUser = null;
+      currentToken = null;
+      localStorage.removeItem('saknarin_session');
+      document.getElementById('nav-user-info').classList.add('hidden-view');
+
+      if (typeof closePaymentMode === 'function') closePaymentMode();
+
+      showView('login-view');
+      Toast.fire({ icon: 'success', title: 'ออกจากระบบสำเร็จ' });
+    }
+
+    // ฟังก์ชันแยกเส้นทางผู้ใช้งานหลังล็อกอินสำเร็จ
+    function routeUserBasedOnRole() {
+      if (!currentUser) return;
+
+      if (currentUser.role === 'Admin') {
+        showView('admin-view');
+        if (typeof loadAdminData === 'function') loadAdminData();
+      } else if (currentUser.role === 'Staff') {
+        showView('staff-view');
+      } else {
+        showView('member-view');
+        document.getElementById('welcome-msg').innerText = `ยินดีต้อนรับคุณ ${currentUser.username}`;
+        loadMemberDashboard();
+      }
+    }
+
+    // --- ฟังก์ชันสำหรับ Member View (ใหม่) ---
+    function loadMemberDashboard() {
+        showLoading('กำลังโหลดข้อมูลสมาชิก...');
+        google.script.run.withSuccessHandler(res => {
+            closeLoading();
+            if (res.success) {
+                const view = document.getElementById('member-view');
+                let html = `
+                    <div class="bg-white rounded-xl shadow-lg border-t-8 border-blue-600 overflow-hidden mb-8">
+                        <div class="p-8 text-center bg-blue-50">
+                            <i class="fa-solid fa-user-circle text-6xl text-blue-600 mb-4"></i>
+                            <h2 class="text-3xl font-bold text-gray-800">ยินดีต้อนรับคุณ ${currentUser.username}</h2>
+                            <p class="text-gray-500">หมายเลขสมาชิก: ${currentUser.username}</p>
+                        </div>
+                        
+                        <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <!-- ส่วนของยอดเงินกู้ -->
+                            <div class="bg-gray-50 p-6 rounded-xl border border-gray-200">
+                                <h3 class="font-bold text-lg mb-4 text-gray-700"><i class="fa-solid fa-file-contract mr-2"></i>ข้อมูลสัญญาเงินกู้</h3>
+                                ${res.loans.length > 0 ? res.loans.map(loan => `
+                                    <div class="bg-white p-4 rounded-lg shadow-sm mb-3 border-l-4 ${loan.status === 'Active' ? 'border-green-500' : 'border-gray-400'}">
+                                        <div class="flex justify-between items-center mb-1">
+                                            <span class="text-sm font-bold text-gray-500">เลขที่สัญญา: ${loan.contractNo}</span>
+                                            <span class="text-xs px-2 py-0.5 rounded-full ${loan.status === 'Active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'} font-bold">${loan.status}</span>
+                                        </div>
+                                        <div class="flex justify-between items-end">
+                                            <div>
+                                                <p class="text-xs text-gray-400">วงเงินกู้</p>
+                                                <p class="font-bold text-gray-700">${Number(loan.loanAmount).toLocaleString()}.-</p>
+                                            </div>
+                                            <div class="text-right">
+                                                <p class="text-xs text-blue-500 font-bold">คงเหลือ</p>
+                                                <p class="text-2xl font-bold text-blue-700">${Number(loan.balance).toLocaleString()}.-</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                `).join('') : '<p class="text-gray-400 text-center py-4">- ไม่มีข้อมูลสัญญา -</p>'}
+                            </div>
+
+                            <!-- ส่วนของประวัติการชำระ -->
+                            <div class="bg-gray-50 p-6 rounded-xl border border-gray-200">
+                                <h3 class="font-bold text-lg mb-4 text-gray-700"><i class="fa-solid fa-history mr-2"></i>ประวัติการชำระเงินล่าสุด</h3>
+                                <div class="space-y-3">
+                                    ${res.transactions.length > 0 ? res.transactions.map(tx => `
+                                        <div class="flex justify-between items-center bg-white p-3 rounded-lg shadow-sm border border-gray-100">
+                                            <div>
+                                                <p class="text-xs text-gray-400">${tx.date}</p>
+                                                <p class="text-sm font-bold text-gray-700">ชำระต้น: ${Number(tx.principal).toLocaleString()} ดอก: ${Number(tx.interest).toLocaleString()}</p>
+                                            </div>
+                                            <div class="text-right">
+                                                <p class="text-xs text-gray-400">คงเหลือ</p>
+                                                <p class="text-sm font-bold text-green-600">${Number(tx.balance).toLocaleString()}</p>
+                                            </div>
+                                        </div>
+                                    `).join('') : '<p class="text-gray-400 text-center py-4">- ไม่พบประวัติ -</p>'}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-blue-600 text-white p-6 rounded-xl shadow-md text-center">
+                        <p class="font-bold mb-2">ต้องการความช่วยเหลือ?</p>
+                        <p class="text-sm opacity-80 mb-4">หากพบข้อมูลผิดพลาดหรือต้องการสอบถามเพิ่มเติม กรุณาติดต่อเจ้าหน้าที่</p>
+                        <button onclick="Swal.fire('ติดต่อเจ้าหน้าที่', 'กรุณาติดต่อเบอร์ 0XX-XXX-XXXX หรือเดินทางมาที่สำนักงาน', 'info')" class="bg-white text-blue-600 px-6 py-2 rounded-full font-bold shadow-sm hover:bg-gray-100 transition">ติดต่อเรา</button>
+                    </div>
+                `;
+                view.innerHTML = html;
+            } else {
+                Swal.fire({ icon: 'error', title: 'ผิดพลาด', text: res.message });
+                if (res.message.includes('Session')) logout();
+            }
+        }).getMemberLoanData(currentToken);
+    }
+  </script>
+</body>
+
+</html>
