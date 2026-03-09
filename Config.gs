@@ -10,16 +10,22 @@ const CONFIG = {
     MAX_RECENT_TX: 20,           // Number of recent transactions to display
     CACHE_TTL_SEC: 300,          // 5 minutes generic cache TTL
     MAX_OTP_ATTEMPTS: 5,         // Max failed OTP attempts before lockout
+    
+    SECURITY: {
+        PEPPER: "SAKNARIN_BANK_SUPER_SECRET_PEPPER_2026"
+    },
+
     ROLES: {
         ADMIN: 'ADMIN',
         STAFF: 'STAFF',
         MEMBER: 'MEMBER'
     },
+
     SHEETS: {
         MEMBERS: 'สมาชิก',
         CONTRACTS: 'สัญญา',
         PAYMENTS: 'ชำระเงิน',
         LOGS: 'Logs',
-        AUTH: 'Auth'             // For users/passwords/roles if applicable
+        AUTH: 'Users'             // Using "Users" according to old code references
     }
 };

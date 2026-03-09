@@ -17,6 +17,9 @@ const StaffService = (() => {
             // Require STAFF or ADMIN role
             AuthService.validateSession(token, [CONFIG.ROLES.STAFF, CONFIG.ROLES.ADMIN]);
             
+            // Init Memory Engine
+            DatabaseEngine.init();
+
             const membersList = MemberRepository.getMemberPage(page, pageSize, query);
             
             // Enrich with balances from ContractRepository
@@ -24,11 +27,12 @@ const StaffService = (() => {
                 const contracts = ContractRepository.getContractsByMemberNo(m.memberNo);
                 const totalBalance = contracts.reduce((sum, c) => sum + (Number(c.balance) || 0), 0);
                 const loanAmount = contracts.reduce((sum, c) => sum + (Number(c.loanAmount) || 0), 0);
-                const activeContract = contracts.length > 0 ? contracts[0].contractNo : '-';
+                const activeContract = contracts.find(c => c.status === 'Active') || contracts[0] || null;
+                const selectedContractNo = activeContract ? activeContract.contractNo : '-';
 
                 return {
                     ...m,
-                    contractNo: activeContract,
+                    contractNo: selectedContractNo,
                     loanAmount: loanAmount,
                     balance: totalBalance
                 };
@@ -52,6 +56,9 @@ const StaffService = (() => {
             AuthService.validateSession(token, [CONFIG.ROLES.STAFF, CONFIG.ROLES.ADMIN]);
 
             if (!memberNo) throw new Error('กรุณาระบุเลขสมาชิก');
+
+            // Init Memory Engine
+            DatabaseEngine.init();
 
             const contracts = ContractRepository.getContractsByMemberNo(memberNo);
             

@@ -128,6 +128,8 @@
 </div>
 
 <script>
+    let isProcessing = false;
+
     // --- ฟังก์ชันเปิด/ปิด Modal หน้า Profile ---
     function openAdminProfileModal() {
         document.getElementById('admin-profile-modal').classList.remove('hidden');
@@ -146,16 +148,29 @@
         if (e.target === this) closeAdminProfileModal();
     });
 
+    function safeText(element, text) {
+        element.textContent = text;
+        return element;
+    }
+
     // --- ฟังก์ชันส่วนข้อมูลส่วนตัว (Profile) ---
     function handleAdminUpdateEmail(e) {
         e.preventDefault();
+        if (isProcessing) return;
+        if (!currentToken) return logout();
+
+        isProcessing = true;
+        const btn = e.target.querySelector('button[type="submit"]');
+        if (btn) btn.disabled = true;
         const newEmail = document.getElementById('admin-profile-email').value;
 
         showLoading('กำลังอัปเดตอีเมล...');
         google.script.run.withSuccessHandler(res => {
             closeLoading();
+            isProcessing = false;
+            if (btn) btn.disabled = false;
             if (res.success) {
-                currentUser.email = res.newEmail;
+                currentUser.email = res.data.newEmail;
                 localStorage.setItem('saknarin_session', JSON.stringify({ user: currentUser, token: currentToken }));
                 Toast.fire({ icon: 'success', title: res.message });
                 loadAdminData();
@@ -164,17 +179,30 @@
                 if (res.message.includes('Session')) logout(); // ตก Session
                 else Swal.fire({ icon: 'error', title: 'อัปเดตไม่สำเร็จ', text: res.message });
             }
+        }).withFailureHandler(err => {
+            closeLoading();
+            isProcessing = false;
+            if (btn) btn.disabled = false;
+            Swal.fire({ icon: 'error', title: 'Server Error', text: err.message || 'Unexpected error' });
         }).updateUserEmail(currentToken, newEmail);
     }
 
     function handleAdminChangePassword(e) {
         e.preventDefault();
+        if (isProcessing) return;
+        if (!currentToken) return logout();
+
+        isProcessing = true;
+        const btn = e.target.querySelector('button[type="submit"]');
+        if (btn) btn.disabled = true;
         const oldPass = document.getElementById('admin-profile-old-pass').value;
         const newPass = document.getElementById('admin-profile-new-pass').value;
 
         showLoading('กำลังเปลี่ยนรหัสผ่าน...');
         google.script.run.withSuccessHandler(res => {
             closeLoading();
+            isProcessing = false;
+            if (btn) btn.disabled = false;
             if (res.success) {
                 Swal.fire({ icon: 'success', title: 'สำเร็จ!', text: res.message });
                 e.target.reset();
@@ -183,72 +211,129 @@
                 if (res.message.includes('Session')) logout();
                 else Swal.fire({ icon: 'error', title: 'ไม่สามารถเปลี่ยนได้', text: res.message });
             }
+        }).withFailureHandler(err => {
+            closeLoading();
+            isProcessing = false;
+            if (btn) btn.disabled = false;
+            Swal.fire({ icon: 'error', title: 'Server Error', text: err.message || 'Unexpected error' });
         }).changeUserPassword(currentToken, oldPass, newPass);
     }
 
     // --- ฟังก์ชันส่วนตารางจัดการระบบ ---
     function loadAdminData() {
+        if (isProcessing) return;
+        if (!currentToken) return logout();
+
+        isProcessing = true;
         showLoading('กำลังโหลดข้อมูลระบบ...');
         google.script.run.withSuccessHandler(res => {
             closeLoading();
+            isProcessing = false;
             if (res.success) {
-                document.getElementById('stat-total').innerText = res.stats.total;
-                document.getElementById('stat-active').innerText = res.stats.active;
-                document.getElementById('stat-banned').innerText = res.stats.banned;
-                renderUserTable(res.users);
+                document.getElementById('stat-total').innerText = res.data.stats.total;
+                document.getElementById('stat-active').innerText = res.data.stats.active;
+                document.getElementById('stat-banned').innerText = res.data.stats.banned;
+                renderUserTable(res.data.users);
             } else {
                 if (res.message.includes('Session') || res.message.includes('Token')) logout();
             }
+        }).withFailureHandler(err => {
+            closeLoading();
+            isProcessing = false;
+            Swal.fire({ icon: 'error', title: 'Server Error', text: err.message || 'Unexpected error' });
         }).getAdminDashboardData(currentToken);
     }
 
     function renderUserTable(users) {
         const tbody = document.getElementById('admin-user-table');
-        tbody.innerHTML = '';
+        tbody.innerHTML = ''; // safe, resets dom node
 
         users.forEach(user => {
-            // ป้องกันไม่ให้ Admin เปลี่ยนสิทธิ์หรือแบนตัวเอง
-            const isMe = user.username === currentUser.username;
-
-            const roleSelect = `
-        <select onchange="changeRole('${user.userId}', this.value)" ${isMe ? 'disabled' : ''} 
-                class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white shadow-sm cursor-pointer ${isMe ? 'opacity-60 cursor-not-allowed' : ''}">
-          <option value="Member" ${user.role === 'Member' ? 'selected' : ''}>Member</option>
-          <option value="Staff" ${user.role === 'Staff' ? 'selected' : ''}>Staff</option>
-          <option value="Admin" ${user.role === 'Admin' ? 'selected' : ''}>Admin</option>
-        </select>
-      `;
-
-            const statusBadge = user.status === 'Active'
-                ? `<span class="bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-bold shadow-sm border border-green-200">Active</span>`
-                : `<span class="bg-red-100 text-red-700 px-3 py-1 rounded-full text-xs font-bold shadow-sm border border-red-200">Banned</span>`;
-
-            const tr = document.createElement('tr');
-            tr.className = "hover:bg-blue-50 transition-colors";
-
-            const banBtnClass = user.status === 'Active' ? 'bg-red-500 hover:bg-red-600' : 'bg-gray-500 hover:bg-gray-600';
-            const banBtnText = user.status === 'Active' ? '<i class="fa-solid fa-ban"></i> แบน' : '<i class="fa-solid fa-unlock"></i> ปลดแบน';
-
-            tr.innerHTML = `
-        <td class="px-6 py-4">
-          <div class="font-bold text-gray-800">${user.username}</div>
-          <div class="text-xs text-gray-500"><i class="fa-solid fa-id-badge mr-1"></i>${user.userId}</div>
-        </td>
-        <td class="px-6 py-4 text-sm text-gray-600">${user.email}</td>
-        <td class="px-6 py-4">${roleSelect}</td>
-        <td class="px-6 py-4 text-center">${statusBadge}</td>
-        <td class="px-6 py-4 text-center">
-          <button onclick="toggleBan('${user.userId}', '${user.status}')" ${isMe ? 'disabled' : ''}
-                  class="text-white px-4 py-1.5 rounded-lg text-sm shadow transition ${banBtnClass} ${isMe ? 'opacity-30 cursor-not-allowed' : ''}">
-            ${banBtnText}
-          </button>
-        </td>
-      `;
-            tbody.appendChild(tr);
+            tbody.appendChild(renderRow(user));
         });
     }
 
-    function changeRole(userId, newRole) {
+    function renderRow(user) {
+        const isMe = user.username === currentUser.username;
+        const tr = document.createElement('tr');
+        tr.className = "hover:bg-blue-50 transition-colors";
+
+        const td1 = document.createElement('td');
+        td1.className = "px-6 py-4";
+        const div1 = document.createElement('div');
+        div1.className = "font-bold text-gray-800";
+        safeText(div1, user.username);
+        const div2 = document.createElement('div');
+        div2.className = "text-xs text-gray-500";
+
+        const icon = document.createElement('i');
+        icon.className = "fa-solid fa-id-badge mr-1";
+        div2.appendChild(icon);
+        div2.appendChild(document.createTextNode(user.userId));
+
+        td1.appendChild(div1);
+        td1.appendChild(div2);
+
+        const td2 = document.createElement('td');
+        td2.className = "px-6 py-4 text-sm text-gray-600";
+        safeText(td2, user.email);
+
+        const td3 = document.createElement('td');
+        td3.className = "px-6 py-4";
+        const select = document.createElement('select');
+        select.className = `border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white shadow-sm cursor-pointer ${isMe ? 'opacity-60 cursor-not-allowed' : ''}`;
+        if (isMe) select.disabled = true;
+
+        ['Member', 'Staff', 'Admin'].forEach(r => {
+            const opt = document.createElement('option');
+            opt.value = r;
+            safeText(opt, r);
+            if (user.role === r) opt.selected = true;
+            select.appendChild(opt);
+        });
+        select.onchange = function () { changeRole(user.userId, this.value, this); };
+        td3.appendChild(select);
+
+        const td4 = document.createElement('td');
+        td4.className = "px-6 py-4 text-center";
+        const spanStatus = document.createElement('span');
+        if (user.status === 'Active') {
+            spanStatus.className = "bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-bold shadow-sm border border-green-200";
+            safeText(spanStatus, "Active");
+        } else {
+            spanStatus.className = "bg-red-100 text-red-700 px-3 py-1 rounded-full text-xs font-bold shadow-sm border border-red-200";
+            safeText(spanStatus, "Banned");
+        }
+        td4.appendChild(spanStatus);
+
+        const td5 = document.createElement('td');
+        td5.className = "px-6 py-4 text-center";
+        const btn = document.createElement('button');
+        const banBtnClass = user.status === 'Active' ? 'bg-red-500 hover:bg-red-600' : 'bg-gray-500 hover:bg-gray-600';
+        btn.className = `text-white px-4 py-1.5 rounded-lg text-sm shadow transition ${banBtnClass} ${isMe ? 'opacity-30 cursor-not-allowed' : ''}`;
+        if (isMe) btn.disabled = true;
+
+        const btnIcon = document.createElement('i');
+        btnIcon.className = user.status === 'Active' ? "fa-solid fa-ban" : "fa-solid fa-unlock";
+        btn.appendChild(btnIcon);
+        btn.appendChild(document.createTextNode(user.status === 'Active' ? ' แบน' : ' ปลดแบน'));
+
+        btn.onclick = function () { toggleBan(user.userId, user.status, this); };
+        td5.appendChild(btn);
+
+        tr.appendChild(td1);
+        tr.appendChild(td2);
+        tr.appendChild(td3);
+        tr.appendChild(td4);
+        tr.appendChild(td5);
+
+        return tr;
+    }
+
+    function changeRole(userId, newRole, selectEl) {
+        if (isProcessing) return;
+        if (!currentToken) return logout();
+
         Swal.fire({
             title: 'ยืนยันการเปลี่ยนสิทธิ์?',
             text: `คุณต้องการเปลี่ยนสิทธิ์เป็น ${newRole} ใช่หรือไม่?`,
@@ -259,9 +344,14 @@
             confirmButtonColor: '#3b82f6'
         }).then((result) => {
             if (result.isConfirmed) {
+                if (selectEl) selectEl.disabled = true;
+                isProcessing = true;
                 showLoading('กำลังอัปเดต...');
+
                 google.script.run.withSuccessHandler(res => {
                     closeLoading();
+                    isProcessing = false;
+                    if (selectEl) selectEl.disabled = false;
                     if (res.success) {
                         Toast.fire({ icon: 'success', title: res.message });
                     } else {
@@ -269,6 +359,11 @@
                         else Swal.fire({ icon: 'error', title: 'ผิดพลาด', text: res.message });
                     }
                     loadAdminData();
+                }).withFailureHandler(err => {
+                    closeLoading();
+                    isProcessing = false;
+                    if (selectEl) selectEl.disabled = false;
+                    Swal.fire({ icon: 'error', title: 'Server Error', text: err.message || 'Unexpected error' });
                 }).updateUserRole(currentToken, userId, newRole);
             } else {
                 loadAdminData(); // รีเซ็ต select กลับเป็นค่าเดิมถ้ากดยกเลิก
@@ -276,7 +371,10 @@
         });
     }
 
-    function toggleBan(userId, currentStatus) {
+    function toggleBan(userId, currentStatus, btnEl) {
+        if (isProcessing) return;
+        if (!currentToken) return logout();
+
         const actionText = currentStatus === 'Active' ? 'ระงับการใช้งาน (Ban)' : 'ปลดระงับ (Unban)';
         Swal.fire({
             title: `ยืนยันการ ${actionText}?`,
@@ -288,9 +386,14 @@
             cancelButtonText: 'ยกเลิก'
         }).then((result) => {
             if (result.isConfirmed) {
+                if (btnEl) btnEl.disabled = true;
+                isProcessing = true;
                 showLoading('กำลังอัปเดตสถานะ...');
+
                 google.script.run.withSuccessHandler(res => {
                     closeLoading();
+                    isProcessing = false;
+                    if (btnEl) btnEl.disabled = false;
                     if (res.success) {
                         Toast.fire({ icon: 'success', title: res.message });
                     } else {
@@ -298,6 +401,11 @@
                         else Swal.fire({ icon: 'error', title: 'ผิดพลาด', text: res.message });
                     }
                     loadAdminData();
+                }).withFailureHandler(err => {
+                    closeLoading();
+                    isProcessing = false;
+                    if (btnEl) btnEl.disabled = false;
+                    Swal.fire({ icon: 'error', title: 'Server Error', text: err.message || 'Unexpected error' });
                 }).toggleUserStatus(currentToken, userId, currentStatus);
             }
         });

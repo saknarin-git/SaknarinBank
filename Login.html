@@ -150,17 +150,17 @@
         showLoading('กำลังตรวจสอบข้อมูลเข้าสู่ระบบ...');
         google.script.run.withSuccessHandler(res => {
             closeLoading();
-            if (res.success) {
+            if (res.success && res.data) {
                 // บันทึกข้อมูล Session ปัจจุบัน
-                currentUser = res.user;
-                currentToken = res.token;
-                localStorage.setItem('saknarin_session', JSON.stringify({ user: res.user, token: res.token })); // บันทึก Session ลง LocalStorage
+                currentUser = res.data.user;
+                currentToken = res.data.token;
+                localStorage.setItem('saknarin_session', JSON.stringify({ user: res.data.user, token: res.data.token })); // บันทึก Session ลง LocalStorage
 
                 // อัปเดต UI แถบเมนูด้านบน
                 document.getElementById('nav-user-info').classList.remove('hidden-view');
-                document.getElementById('nav-username').innerText = currentUser.username + ' (' + currentUser.role + ')';
+                document.getElementById('nav-username').innerText = escapeHtml(currentUser.username) + ' (' + escapeHtml(currentUser.role) + ')';
 
-                Toast.fire({ icon: 'success', title: 'ยินดีต้อนรับ ' + currentUser.username });
+                Toast.fire({ icon: 'success', title: 'ยินดีต้อนรับ ' + escapeHtml(currentUser.username) });
 
                 // ดึงฟังก์ชันมาจาก Index.html เพื่อแยกเส้นทางตามสิทธิ์ (Admin / Staff / Member)
                 routeUserBasedOnRole();
@@ -170,6 +170,9 @@
             } else {
                 Swal.fire({ icon: 'error', title: 'เข้าสู่ระบบไม่สำเร็จ', text: res.message });
             }
+        }).withFailureHandler(err => {
+            closeLoading();
+            Swal.fire({ icon: 'error', title: 'ระบบผิดพลาด', text: err.message || 'Server error' });
         }).loginUser(user, pass);
     }
 
@@ -190,6 +193,9 @@
             } else {
                 Swal.fire({ icon: 'error', title: 'ไม่สามารถสมัครได้', text: res.message });
             }
+        }).withFailureHandler(err => {
+            closeLoading();
+            Swal.fire({ icon: 'error', title: 'ระบบผิดพลาด', text: err.message || 'Server error' });
         }).registerUser(user, pass, email);
     }
 
@@ -210,6 +216,9 @@
             } else {
                 Swal.fire({ icon: 'error', title: 'ข้อผิดพลาด', text: res.message });
             }
+        }).withFailureHandler(err => {
+            closeLoading();
+            Swal.fire({ icon: 'error', title: 'ระบบผิดพลาด', text: err.message || 'Server error' });
         }).generateAndSendOTP(tempEmailForReset);
     }
 
@@ -230,6 +239,9 @@
             } else {
                 Swal.fire({ icon: 'error', title: 'ข้อมูลไม่ถูกต้อง', text: res.message });
             }
+        }).withFailureHandler(err => {
+            closeLoading();
+            Swal.fire({ icon: 'error', title: 'ระบบผิดพลาด', text: err.message || 'Server error' });
         }).verifyOTPAndResetPassword(tempEmailForReset, otp, newPass);
     }
 </script>

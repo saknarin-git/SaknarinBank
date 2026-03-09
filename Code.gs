@@ -23,41 +23,128 @@ function include(filename) {
  */
 
 function loginUser(username, password) {
-    // Moved login logic to a local function here for simplicity, or it could be in AuthService
-    const sheet = SpreadsheetApp.getActive().getSheetByName('Users');
-    const range = sheet.getRange("B:B");
-    const finder = range.createTextFinder(username).matchEntireCell(true).findNext();
-    
-    if (!finder) return Utils.response(false, 'ไม่พบ Username หรือรหัสผ่านไม่ถูกต้อง');
-    
-    const row = finder.getRow();
-    const data = sheet.getRange(row, 1, 1, 6).getValues()[0];
-    
-    // User data mapping
-    const user = { id: data[0], username: data[1], hash: data[2], email: data[3], role: data[4], status: data[5] };
-    
-    if (user.status !== 'Active') return Utils.response(false, 'บัญชีของคุณถูกระงับการใช้งาน');
-    
-    // Check password
-    const parts = user.hash.split(':');
-    if (parts.length === 2) {
-        const testHash = AuthService.hashPassword(password, parts[1]);
-        if (testHash === user.hash.split(':')[0]) { // Match the base64 part
-            const token = AuthService.createSession(user);
-            Utils.logMessage('INFO', 'LOGIN', 'เข้าสู่ระบบสำเร็จ', user.username);
-            return Utils.response(true, 'เข้าสู่ระบบสำเร็จ', { user, token });
+    try {
+        const safeUsername = String(username).trim();
+        if (!safeUsername) return Utils.response(false, 'กรุณาระบุ Username');
+
+        // Rate Limiting
+        AuthService.checkRateLimit(safeUsername);
+
+        const sheet = SpreadsheetApp.getActive().getSheetByName(CONFIG.SHEETS.AUTH);
+        if (!sheet) throw new Error('ไม่พบฐานข้อมูลผู้ใช้งานในระบบ');
+
+        const lastRow = sheet.getLastRow();
+        if (lastRow < 2) return Utils.response(false, 'ไม่พบ Username หรือรหัสผ่านไม่ถูกต้อง');
+
+        // Build O(1) user index (Fix #10)
+        const data = sheet.getRange(2, 1, lastRow - 1, 6).getValues();
+        DatabaseEngine.buildUserIndex(data);
+
+        const userRow = DatabaseEngine.Query.getUserByUsername(safeUsername);
+
+        if (!userRow) return Utils.response(false, 'ไม่พบ Username หรือรหัสผ่านไม่ถูกต้อง');
+        
+        // User data mapping
+        const user = { 
+            id: userRow[0], 
+            username: userRow[1], 
+            hash: userRow[2], 
+            email: userRow[3], 
+            role: userRow[4], 
+            status: userRow[5] 
+        };
+        
+        if (user.status !== 'Active') return Utils.response(false, 'บัญชีของคุณถูกระงับการใช้งาน');
+        
+        // Check password via Service
+        const parts = user.hash.split(':');
+        if (parts.length === 2) {
+            const expectedHash = parts[0];
+            const salt = parts[1];
+            
+            const testHash = AuthService.hashPassword(password, salt);
+            
+            if (testHash === expectedHash) {
+                AuthService.clearRateLimit(safeUsername);
+                const token = AuthService.createSession(user);
+                Utils.logMessage('INFO', 'LOGIN', 'เข้าสู่ระบบสำเร็จ', user.username);
+                Utils.flushLogs();
+                return Utils.response(true, 'เข้าสู่ระบบสำเร็จ', { user, token });
+            }
         }
+        
+        Utils.flushLogs();
+        return Utils.response(false, 'รหัสผ่านไม่ถูกต้อง');
+
+    } catch (err) {
+        Utils.flushLogs();
+        return Utils.response(false, err.message);
     }
-    return Utils.response(false, 'รหัสผ่านไม่ถูกต้อง');
 }
 
 function logoutUser(token) {
-    AuthService.destroySession(token);
-    return Utils.response(true, 'ออกจากระบบสำเร็จ');
+    try {
+        AuthService.destroySession(token);
+        return Utils.response(true, 'ออกจากระบบสำเร็จ');
+    } catch (err) {
+        return Utils.response(false, err.message);
+    }
 }
 
-function processPayment(token, contractId, principal, interest) {
-    // Used by standard POST or custom calls
+function restoreSession(token) {
+    try {
+        const session = AuthService.validateSession(token, [CONFIG.ROLES.ADMIN, CONFIG.ROLES.STAFF, CONFIG.ROLES.MEMBER]);
+        return Utils.response(true, 'Session valid', { 
+            valid: true, 
+            user: { 
+                id: session.id,
+                username: session.username, 
+                role: session.role 
+            } 
+        });
+    } catch(err) {
+        return Utils.response(false, err.message);
+    }
+}
+
+function registerUser(username, password, email) {
+    try {
+        return UserService.registerUser(username, password, email);
+    } catch (err) {
+        return Utils.response(false, err.message);
+    }
+}
+
+function generateAndSendOTP(email) {
+    try {
+        return UserService.generateAndSendOTP(email);
+    } catch (err) {
+        return Utils.response(false, err.message);
+    }
+}
+
+function verifyOTPAndResetPassword(email, otp, newPassword) {
+    try {
+        return UserService.verifyOTPAndResetPassword(email, otp, newPassword);
+    } catch (err) {
+        return Utils.response(false, err.message);
+    }
+}
+
+function updateUserEmail(token, newEmail) {
+    try {
+        return UserService.updateUserEmail(token, newEmail);
+    } catch (err) {
+        return Utils.response(false, err.message);
+    }
+}
+
+function changeUserPassword(token, oldPassword, newPassword) {
+    try {
+        return UserService.changeUserPassword(token, oldPassword, newPassword);
+    } catch (err) {
+        return Utils.response(false, err.message);
+    }
 }
 
 /**
@@ -67,25 +154,65 @@ function processPayment(token, contractId, principal, interest) {
  */
 
 function getStaffMemberDirectory(token) {
-    return StaffService.getStaffMemberDirectoryPage(token, 1, 500, ""); // Fetch first 500 for simplicity UI
+    try {
+        return StaffService.getStaffMemberDirectoryPage(token, 1, 500, ""); 
+    } catch (err) {
+        return Utils.response(false, err.message);
+    }
 }
 
 function searchMemberForPayment(token, memberNo) {
-    return StaffService.searchMemberForPayment(token, memberNo);
+    try {
+        return StaffService.searchMemberForPayment(token, memberNo);
+    } catch (err) {
+        return Utils.response(false, err.message);
+    }
 }
 
+// Fixed empty processPayment to call Service layer
+function processPayment(token, payload) {
+    try {
+        return PaymentService.processPayment(token, payload);
+    } catch(err) {
+        return Utils.response(false, err.message);
+    }
+}
+
+// Removed duplicated logic, routes to processPayment
 function savePaymentTransaction(token, payload) {
-    return PaymentService.processPayment(token, payload);
+    return processPayment(token, payload);
 }
 
 function getRecentTransactions(token) {
-    return PaymentService.getRecentTransactions(token);
+    try {
+        const txs = PaymentService.getRecentTransactions(token);
+        return Utils.response(true, 'ดึงข้อมูลสำเร็จ', txs);
+    } catch(err) {
+        return Utils.response(false, err.message);
+    }
+}
+
+function addLoanMember(token, data) {
+    try {
+        return LoanService.addLoanMember(token, data);
+    } catch (err) {
+        return Utils.response(false, err.message);
+    }
+}
+
+function getNextLoanInfo() {
+    try {
+        return LoanService.getNextLoanInfo();
+    } catch (err) {
+        return Utils.response(false, err.message);
+    }
 }
 
 function getDailyReportData(token) {
-    // Forwarding to PaymentRepository for daily report
     try {
         const session = AuthService.validateSession(token, [CONFIG.ROLES.STAFF, CONFIG.ROLES.ADMIN]);
+        
+        DatabaseEngine.init();
         const txs = PaymentRepository.getRecentTransactions(100); 
         
         let principalPaid = 0;
@@ -98,7 +225,6 @@ function getDailyReportData(token) {
             totalPaid += Number(tx.total) || 0;
         });
 
-        // Hardcode brought/carried for demonstration or calculate from ContractRepo
         return Utils.response(true, 'Success', {
             reportDate: Utils.formatDateTime(new Date()),
             summary: {
@@ -110,8 +236,8 @@ function getDailyReportData(token) {
             },
             transactions: txs
         });
-    } catch(e) {
-        return Utils.response(false, e.message);
+    } catch(err) {
+        return Utils.response(false, err.message);
     }
 }
 
@@ -122,13 +248,49 @@ function getDailyReportData(token) {
  */
 
 function getAdminDashboardData(token) {
-    return AdminService.getAdminDashboardData(token);
+    try {
+        return AdminService.getAdminDashboardData(token);
+    } catch (err) {
+        return Utils.response(false, err.message);
+    }
 }
 
 function updateUserRole(token, targetUserId, newRole) {
-    return AdminService.updateUserRole(token, targetUserId, newRole);
+    try {
+        return AdminService.updateUserRole(token, targetUserId, newRole);
+    } catch (err) {
+        return Utils.response(false, err.message);
+    }
 }
 
 function toggleUserStatus(token, targetUserId, currentStatus) {
-    return AdminService.toggleUserStatus(token, targetUserId, currentStatus);
+    try {
+        return AdminService.toggleUserStatus(token, targetUserId, currentStatus);
+    } catch (err) {
+        return Utils.response(false, err.message);
+    }
+}
+
+/**
+ * ====================================
+ * MEMBER ROUTING (Member Dashboard)
+ * ====================================
+ */
+function getMemberLoanData(token) {
+    try {
+        const session = AuthService.validateSession(token, [CONFIG.ROLES.MEMBER]);
+        
+        DatabaseEngine.init();
+
+        const contracts = ContractRepository.getContractsByMemberNo(session.username); 
+        const allTx = PaymentRepository.getRecentTransactions(500); 
+        const myTx = allTx.filter(tx => String(tx.memberNo) === String(session.username)).slice(0, 5);
+
+        return Utils.response(true, 'ดึงข้อมูลสำเร็จ', {
+            loans: contracts,
+            transactions: myTx
+        });
+    } catch(err) {
+        return Utils.response(false, err.message);
+    }
 }

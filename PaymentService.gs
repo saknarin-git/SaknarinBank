@@ -1,8 +1,22 @@
 /**
  * 📂 PaymentService.gs
- * Business logic for processing payments. Uses LockService for atomic updates.
+ * Business logic for processing payments. Uses Contract-Level LockService for atomic updates
+ * and DatabaseEngine True Transactions.
  */
 const PaymentService = (() => {
+
+    /**
+     * Sanitizes input to prevent spreadsheet formula injection.
+     */
+    function _sanitize(str) {
+        if (!str) return '';
+        const safeStr = String(str).trim();
+        // Prevent formula injection
+        if (safeStr.startsWith('=') || safeStr.startsWith('+') || safeStr.startsWith('-') || safeStr.startsWith('@')) {
+            return "'" + safeStr;
+        }
+        return safeStr;
+    }
 
     /**
      * Processes a payment transaction atomically.
@@ -11,7 +25,6 @@ const PaymentService = (() => {
      * @returns {object} Success or failure response
      */
     function processPayment(token, payload) {
-        // Validate session first outside the lock
         let session;
         try {
             session = AuthService.validateSession(token, [CONFIG.ROLES.STAFF, CONFIG.ROLES.ADMIN]);
@@ -19,76 +32,119 @@ const PaymentService = (() => {
             return Utils.response(false, error.message);
         }
 
-        const lock = LockService.getScriptLock();
+        const { memberNo, contractNo, principalPaid = 0, interestPaid = 0, totalPaid = 0, note = '' } = payload;
+        
+        // Input sanitization
+        const safeMemberNo = _sanitize(memberNo);
+        const safeContractNo = _sanitize(contractNo);
+        const safeNote = _sanitize(note);
+        const safeStaff = _sanitize(session.username);
+
+        // Pre-flight checks
+        if (!safeMemberNo || !safeContractNo) {
+            return Utils.response(false, 'ข้อมูลเลขสมาชิกหรือเลขสัญญาไม่ครบถ้วน');
+        }
+
+        // Validate payment totals (Req #4)
+        const pTotal = Number(principalPaid) || 0;
+        const pInterest = Number(interestPaid) || 0;
+        const pSum = Number(totalPaid) || 0;
+        
+        if (pTotal + pInterest !== pSum) {
+            return Utils.response(false, 'ยอดชำระรวมไม่ตรงกับผลรวมของเงินต้นและดอกเบี้ย');
+        }
+
+        if (pSum <= 0) {
+            return Utils.response(false, 'ยอดชำระต้องมากกว่า 0');
+        }
+
+        // Contract-level locking (Req #2)
+        // This allows multiple *different* contracts to be paid simultaneously, 
+        // while blocking double-submissions on the *same* contract.
+        const lock = LockService.getDocumentLock();
         
         try {
-            // Wait up to 30 seconds for concurrent processes to finish
-            const lockAcquired = lock.waitLock(30000);
-            if (!lockAcquired) {
-                return Utils.response(false, 'ระบบกำลังประมวลผลธุรกรรมอื่น กรุณาลองใหม่ (System Busy)');
-            }
+            // waitLock() throws on timeout, does NOT return boolean
+            lock.waitLock(15000);
 
-            const { memberNo, contractNo, principalPaid = 0, interestPaid = 0, totalPaid = 0, note = '' } = payload;
-            
-            if (totalPaid <= 0 && principalPaid === 0 && interestPaid === 0) {
-                throw new Error('ยอดชำระไม่ถูกต้อง');
-            }
+            // Init Memory Engine 
+            DatabaseEngine.init();
 
-            // 1. Fetch current contract state inside the lock
-            const contracts = ContractRepository.getContractsByMemberNo(memberNo);
-            const contract = contracts.find(c => c.contractNo === contractNo);
+            // Fetch contract state using optimized lookup (Req #13)
+            const contract = DatabaseEngine.Query.getContractById(safeContractNo);
 
             if (!contract) {
-                throw new Error('ไม่พบข้อมูลสัญญา หรือ สัญญาถูกปิดไปแล้ว');
+                throw new Error('ไม่พบข้อมูลสัญญา หรือ สัญญาดึงข้อมูลล้มเหลว');
+            }
+            if (contract.memberNo !== safeMemberNo) {
+                throw new Error('เลขสัญญาไม่ตรงกับรหัสสมาชิก');
+            }
+            if (contract.status === 'CLOSED') {
+                throw new Error('สัญญานี้ถูกปิดไปแล้ว (ชำระครบแล้ว)');
             }
 
-            if (principalPaid > contract.balance) {
-                throw new Error(`ชำระเงินต้น (${principalPaid}) เกินยอดยกมา (${contract.balance})`);
+            // Prevent negative balances (Req #3)
+            const newBalance = contract.balance - pTotal;
+            if (newBalance < 0) {
+                throw new Error(`ไม่อนุญาตให้ยอดคงเหลือติดลบ ชำระเงินต้น (${pTotal}) เกินยอดยกมา (${contract.balance})`);
             }
 
-            // 2. Calculate new balance
-            const newBalance = contract.balance - principalPaid;
+            // Auto-close contract (Req #5)
+            const newStatus = newBalance === 0 ? 'CLOSED' : contract.status;
 
-            // 3. Log the transaction
+            // Log the transaction
             const txId = Utils.generateUUID();
             const timestamp = formatDateTime(new Date());
 
             const txRecord = {
                 txId,
-                timestamp: new Date(),
-                memberNo,
-                contractNo,
+                timestamp: timestamp,
+                memberNo: safeMemberNo,
+                contractNo: safeContractNo,
                 fullName: contract.fullName,
-                principalPaid,
-                interestPaid,
-                totalPaid,
+                principalPaid: pTotal,
+                interestPaid: pInterest,
+                totalPaid: pSum,
                 balanceAfter: newBalance,
-                staffName: session.username || 'Staff',
-                note
+                staffName: safeStaff,
+                note: safeNote
             };
 
-            PaymentRepository.insertPayment(txRecord);
+            // Begin TRUE Transaction (Req #1)
+            DatabaseEngine.beginTransaction();
 
-            // 4. Update the contract balance
-            ContractRepository.updateContractBalance(contract.rowIndex, newBalance);
+            // 1. Update contract balance
+            DatabaseEngine.queueContractBalanceUpdate(contract.rowIndex, safeContractNo, newBalance, newStatus);
+            
+            // 2. Insert payment history
+            DatabaseEngine.queuePaymentInsert(txRecord);
 
-            // 5. Construct Passbook receipt view
+            // 3. Commit to sheets
+            DatabaseEngine.commit();
+
+            // Audit Logging (Req #15)
+            Utils.logMessage('INFO', 'PAYMENT_SUCCESS', `TxID: ${txId} ยอด: ${pSum} สัญญา: ${safeContractNo}`, safeStaff);
+
+            // Construct receipt view
             const passbook = {
                 date: timestamp,
-                principal: principalPaid,
-                interest: interestPaid,
+                principal: pTotal,
+                interest: pInterest,
                 balance: newBalance,
-                note: note || '-'
+                note: safeNote || '-'
             };
 
             return Utils.response(true, 'บันทึกสำเร็จ', { passbook });
 
         } catch (error) {
-            Utils.logMessage('ERROR', 'PROCESS_PAYMENT_FAIL', error.message, session.username);
+            // Rollback memory if write failed
+            DatabaseEngine.rollback();
+            
+            Utils.logMessage('ERROR', 'PROCESS_PAYMENT_FAIL', error.message, session ? session.username : 'SYSTEM');
             return Utils.response(false, error.message);
         } finally {
-            // Always release lock
             lock.releaseLock();
+            Utils.flushLogs();
         }
     }
 
@@ -100,8 +156,9 @@ const PaymentService = (() => {
     function getRecentTransactions(token) {
         try {
             AuthService.validateSession(token, [CONFIG.ROLES.STAFF, CONFIG.ROLES.ADMIN]);
-            const txs = PaymentRepository.getRecentTransactions(CONFIG.MAX_RECENT_TX);
-            return txs; // Return raw array to match existing UI expectation, or wrapped in response
+            DatabaseEngine.init();
+            const txs = DatabaseEngine.Query.getRecentPayments(CONFIG.MAX_RECENT_TX || 20);
+            return txs; 
         } catch (error) {
             return [];
         }

@@ -8,13 +8,20 @@ const AdminService = (() => {
         try {
             AuthService.validateSession(token, [CONFIG.ROLES.ADMIN]);
             
-            const sheet = SpreadsheetApp.getActive().getSheetByName('Users');
-            const data = sheet.getDataRange().getValues();
+            const sheet = SpreadsheetApp.getActive().getSheetByName(CONFIG.SHEETS.AUTH);
+            if (!sheet) throw new Error('ไม่พบฐานข้อมูลผู้ใช้');
+            
+            const lastRow = sheet.getLastRow();
+            if (lastRow < 2) {
+                return Utils.response(true, 'ไม่มีข้อมูล', { stats: { total: 0, active: 0, banned: 0 }, users: [] });
+            }
+
+            const data = sheet.getRange(2, 1, lastRow - 1, 6).getValues();
             
             let totalUsers = 0, activeUsers = 0, bannedUsers = 0;
             let userList = [];
             
-            for (let i = 1; i < data.length; i++) {
+            for (let i = 0; i < data.length; i++) {
                 totalUsers++;
                 if (data[i][5] === 'Active') activeUsers++;
                 if (data[i][5] === 'Banned') bannedUsers++;
@@ -41,15 +48,18 @@ const AdminService = (() => {
     function updateUserRole(token, targetUserId, newRole) {
         try {
             const session = AuthService.validateSession(token, [CONFIG.ROLES.ADMIN]);
-            const sheet = SpreadsheetApp.getActive().getSheetByName('Users');
+            const sheet = SpreadsheetApp.getActive().getSheetByName(CONFIG.SHEETS.AUTH);
             
-            const range = sheet.getRange(1, 1, sheet.getLastRow());
+            const range = sheet.getRange(1, 1, sheet.getLastRow(), sheet.getLastColumn());
             const finder = range.createTextFinder(targetUserId).matchEntireCell(true).findNext();
             
             if(!finder) throw new Error('ไม่พบข้อมูลผู้ใช้');
             
             const row = finder.getRow();
             sheet.getRange(row, 5).setValue(newRole); // Role column
+            
+            // Invalidate cache immediately
+            CacheWrapper.remove('role_' + targetUserId);
             
             Utils.logMessage('INFO', 'UPDATE_ROLE', `เปลี่ยนสิทธิ์ผู้ใช้ ${targetUserId} เป็น ${newRole}`, session.username);
             
@@ -63,9 +73,9 @@ const AdminService = (() => {
     function toggleUserStatus(token, targetUserId, currentStatus) {
         try {
             const session = AuthService.validateSession(token, [CONFIG.ROLES.ADMIN]);
-            const sheet = SpreadsheetApp.getActive().getSheetByName('Users');
+            const sheet = SpreadsheetApp.getActive().getSheetByName(CONFIG.SHEETS.AUTH);
             
-            const range = sheet.getRange(1, 1, sheet.getLastRow());
+            const range = sheet.getRange(1, 1, sheet.getLastRow(), sheet.getLastColumn());
             const finder = range.createTextFinder(targetUserId).matchEntireCell(true).findNext();
             
             if(!finder) throw new Error('ไม่พบข้อมูลผู้ใช้');
@@ -73,6 +83,9 @@ const AdminService = (() => {
             const row = finder.getRow();
             const newStatus = currentStatus === 'Active' ? 'Banned' : 'Active';
             sheet.getRange(row, 6).setValue(newStatus); // Status column
+            
+            // Invalidate cache immediately
+            CacheWrapper.remove('status_' + targetUserId);
             
             Utils.logMessage('INFO', 'TOGGLE_STATUS', `เปลี่ยนสถานะผู้ใช้ ${targetUserId} เป็น ${newStatus}`, session.username);
             

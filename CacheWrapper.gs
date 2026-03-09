@@ -18,6 +18,8 @@ const CacheWrapper = (() => {
     function put(key, value, ttlInSeconds) {
         if (!ttlInSeconds) ttlInSeconds = CONFIG.CACHE_TTL_SEC;
         const stringValue = typeof value === 'object' ? JSON.stringify(value) : String(value);
+        // CacheService has a 100KB per-key limit. Skip silently if too large.
+        if (stringValue.length > 100000) return;
         getScriptCache().put(key, stringValue, ttlInSeconds);
     }
 
@@ -32,7 +34,7 @@ const CacheWrapper = (() => {
         try {
             return JSON.parse(val);
         } catch (e) {
-            return val; // Return raw string if not JSON
+            return val; 
         }
     }
 

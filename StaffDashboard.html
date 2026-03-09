@@ -406,6 +406,13 @@
 </style>
 
 <script>
+    let isSubmitting = false;
+
+    function safeText(element, text) {
+        element.textContent = text;
+        return element;
+    }
+
     // ==========================================
     // ส่วนที่ 1: ระบบจัดการเมนูหลัก และ Modal ทั่วไป
     // ==========================================
@@ -424,6 +431,13 @@
     }
     function submitAddMember(e) {
         e.preventDefault();
+        if (isSubmitting) return;
+        if (!currentToken) return logout();
+
+        isSubmitting = true;
+        const btn = e.target.querySelector('button[type="submit"]');
+        if (btn) btn.disabled = true;
+
         const data = {
             memberNo: document.getElementById('loan-member-no').value,
             fullName: document.getElementById('loan-fullname').value,
@@ -434,6 +448,8 @@
         showLoading('กำลังบันทึกข้อมูล...');
         google.script.run.withSuccessHandler(res => {
             closeLoading();
+            isSubmitting = false;
+            if (btn) btn.disabled = false;
             if (res.success) {
                 Swal.fire({ icon: 'success', title: 'สำเร็จ', text: res.message });
                 closeAddMemberModal();
@@ -441,6 +457,11 @@
                 if (res.message && res.message.includes('Session')) logout();
                 else Swal.fire({ icon: 'error', title: 'ไม่สามารถบันทึกได้', text: res.message });
             }
+        }).withFailureHandler(err => {
+            closeLoading();
+            isSubmitting = false;
+            if (btn) btn.disabled = false;
+            Swal.fire({ icon: 'error', title: 'Server Error', text: err.message || 'Unexpected error' });
         }).addLoanMember(currentToken, data);
     }
 
@@ -469,21 +490,22 @@
                         let tr = document.createElement('tr');
                         let isRed = tx.interest === 0 ? 'bg-red-50 text-red-900 border-red-200' : 'hover:bg-gray-50';
                         if (tx.interest === 0) {
-                            tr.style.backgroundColor = '#fef2f2'; // bg-red-50 for print
+                            tr.style.backgroundColor = '#fef2f2';
                             tr.style.webkitPrintColorAdjust = 'exact';
                             tr.style.printColorAdjust = 'exact';
                         }
                         tr.className = isRed;
-                        tr.innerHTML = `
-                             <td class="border border-gray-800 py-2">${idx + 1}</td>
-                             <td class="border border-gray-800 py-2">${tx.time}</td>
-                             <td class="border border-gray-800 py-2 font-bold">${tx.memberNo}</td>
-                             <td class="border border-gray-800 py-2 text-left px-2 whitespace-nowrap overflow-hidden text-ellipsis">${tx.name}</td>
-                             <td class="border border-gray-800 py-2 text-blue-600 font-bold">${Number(tx.principal).toLocaleString('en-US')}</td>
-                             <td class="border border-gray-800 py-2 text-red-600 font-bold">${Number(tx.interest).toLocaleString('en-US')}</td>
-                             <td class="border border-gray-800 py-2 text-green-700 font-bold">${Number(tx.remaining).toLocaleString('en-US')}</td>
-                             <td class="border border-gray-800 py-2 text-xs text-gray-600">${tx.note}</td>
-                         `;
+
+                        const td1 = document.createElement('td'); td1.className = "border border-gray-800 py-2"; safeText(td1, idx + 1);
+                        const td2 = document.createElement('td'); td2.className = "border border-gray-800 py-2"; safeText(td2, tx.time);
+                        const td3 = document.createElement('td'); td3.className = "border border-gray-800 py-2 font-bold"; safeText(td3, tx.memberNo);
+                        const td4 = document.createElement('td'); td4.className = "border border-gray-800 py-2 text-left px-2 whitespace-nowrap overflow-hidden text-ellipsis"; safeText(td4, tx.name);
+                        const td5 = document.createElement('td'); td5.className = "border border-gray-800 py-2 text-blue-600 font-bold"; safeText(td5, Number(tx.principal).toLocaleString('en-US'));
+                        const td6 = document.createElement('td'); td6.className = "border border-gray-800 py-2 text-red-600 font-bold"; safeText(td6, Number(tx.interest).toLocaleString('en-US'));
+                        const td7 = document.createElement('td'); td7.className = "border border-gray-800 py-2 text-green-700 font-bold"; safeText(td7, Number(tx.remaining).toLocaleString('en-US'));
+                        const td8 = document.createElement('td'); td8.className = "border border-gray-800 py-2 text-xs text-gray-600"; safeText(td8, tx.note);
+
+                        tr.appendChild(td1); tr.appendChild(td2); tr.appendChild(td3); tr.appendChild(td4); tr.appendChild(td5); tr.appendChild(td6); tr.appendChild(td7); tr.appendChild(td8);
                         tbody.appendChild(tr);
                     });
                 }
@@ -508,12 +530,20 @@
 
     function staffHandleUpdateEmail(e) {
         e.preventDefault();
+        if (isSubmitting) return;
+        if (!currentToken) return logout();
+
+        isSubmitting = true;
+        const btn = e.target.querySelector('button[type="submit"]');
+        if (btn) btn.disabled = true;
         const newEmail = document.getElementById('staff-new-email').value;
         showLoading('กำลังอัปเดตอีเมล...');
         google.script.run.withSuccessHandler(res => {
             closeLoading();
+            isSubmitting = false;
+            if (btn) btn.disabled = false;
             if (res.success) {
-                currentUser.email = res.newEmail;
+                currentUser.email = res.data.newEmail;
                 localStorage.setItem('saknarin_session', JSON.stringify({ user: currentUser, token: currentToken }));
                 Toast.fire({ icon: 'success', title: res.message });
                 closeStaffProfileModal();
@@ -521,15 +551,28 @@
                 if (res.message && res.message.includes('Session')) logout();
                 else Swal.fire({ icon: 'error', title: 'ผิดพลาด', text: res.message });
             }
+        }).withFailureHandler(err => {
+            closeLoading();
+            isSubmitting = false;
+            if (btn) btn.disabled = false;
+            Swal.fire({ icon: 'error', title: 'Server Error', text: err.message || 'Unexpected error' });
         }).updateUserEmail(currentToken, newEmail);
     }
     function staffHandleChangePassword(e) {
         e.preventDefault();
+        if (isSubmitting) return;
+        if (!currentToken) return logout();
+
+        isSubmitting = true;
+        const btn = e.target.querySelector('button[type="submit"]');
+        if (btn) btn.disabled = true;
         const oldPass = document.getElementById('staff-old-pass').value;
         const newPass = document.getElementById('staff-new-pass').value;
         showLoading('กำลังเปลี่ยนรหัสผ่าน...');
         google.script.run.withSuccessHandler(res => {
             closeLoading();
+            isSubmitting = false;
+            if (btn) btn.disabled = false;
             if (res.success) {
                 Swal.fire({ icon: 'success', title: 'สำเร็จ!', text: res.message });
                 e.target.reset();
@@ -538,6 +581,11 @@
                 if (res.message && res.message.includes('Session')) logout();
                 else Swal.fire({ icon: 'error', title: 'ผิดพลาด', text: res.message });
             }
+        }).withFailureHandler(err => {
+            closeLoading();
+            isSubmitting = false;
+            if (btn) btn.disabled = false;
+            Swal.fire({ icon: 'error', title: 'Server Error', text: err.message || 'Unexpected error' });
         }).changeUserPassword(currentToken, oldPass, newPass);
     }
 
@@ -546,15 +594,14 @@
     // ==========================================
 
     const AppState = {
-        SEARCH: 1,
-        SELECT: 2,
-        INTEREST: 3,
-        PAY: 4,
-        SUCCESS: 5
+        SEARCH: 'SEARCH',
+        SELECT: 'SELECT',
+        INTEREST: 'INTEREST',
+        PAY: 'PAY',
+        SUCCESS: 'SUCCESS'
     };
 
     let paymentState = AppState.SEARCH;
-    let isSubmitting = false;
     let selectedContract = null;
     let currentContracts = [];
     let activeContractIndex = 0;
@@ -676,7 +723,7 @@
                     return;
                 }
 
-                currentContracts = res.contracts;
+                currentContracts = res.data.contracts;
                 if (currentContracts.length > 1) {
                     paymentState = AppState.SELECT; activeContractIndex = 0;
                     document.getElementById('multi-contract-modal').classList.remove('hidden');
@@ -688,7 +735,11 @@
             .withFailureHandler(err => {
                 isSubmitting = false;
                 closeLoading();
-                Toast.fire({ icon: 'error', title: 'ระบบผิดพลาด' });
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Server Error',
+                    text: err.message || 'Unexpected error'
+                });
                 resetPaymentUI();
             })
             .searchMemberForPayment(currentToken, memberNo);
@@ -700,7 +751,17 @@
         currentContracts.forEach((c, index) => {
             let div = document.createElement('div');
             div.className = `p-3 border-2 rounded-lg cursor-pointer transition-colors ${index === activeContractIndex ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-white hover:bg-gray-50'}`;
-            div.innerHTML = `<div class="font-bold text-gray-800">สัญญา: ${c.contractNo}</div><div class="text-sm font-bold text-red-600">คงเหลือ: ${c.balance.toLocaleString('en-US')} บาท</div>`;
+
+            const div1 = document.createElement('div');
+            div1.className = 'font-bold text-gray-800';
+            div1.textContent = 'สัญญา: ' + c.contractNo;
+
+            const div2 = document.createElement('div');
+            div2.className = 'text-sm font-bold text-red-600';
+            div2.textContent = 'คงเหลือ: ' + c.balance.toLocaleString('en-US') + ' บาท';
+
+            div.appendChild(div1);
+            div.appendChild(div2);
             div.onclick = () => { activeContractIndex = index; selectContract(c); };
             list.appendChild(div);
         });
@@ -710,7 +771,18 @@
         document.getElementById('multi-contract-modal').classList.add('hidden');
         selectedContract = contract;
 
-        document.getElementById('memberName').innerHTML = `<span class="text-blue-700">${contract.fullName}</span> <span class="text-gray-500 text-sm ml-2">(สัญญา: ${contract.contractNo})</span>`;
+        const nameSpan = document.createElement('span');
+        nameSpan.className = 'text-blue-700';
+        nameSpan.textContent = contract.fullName;
+
+        const contractSpan = document.createElement('span');
+        contractSpan.className = 'text-gray-500 text-sm ml-2';
+        contractSpan.textContent = '(สัญญา: ' + contract.contractNo + ')';
+
+        const memberNameDiv = document.getElementById('memberName');
+        memberNameDiv.innerHTML = '';
+        memberNameDiv.appendChild(nameSpan);
+        memberNameDiv.appendChild(contractSpan);
         document.getElementById("balance").innerText = selectedContract.balance.toLocaleString();
 
         if (contract.missedMonths > 0) {
@@ -789,31 +861,35 @@
                 isSubmitting = false;
                 closeLoading();
 
-                if (!res.success) {
-                    if (res.message && res.message.includes('Session')) { logout(); return; }
-                    Toast.fire({ icon: 'error', title: res.message });
-                    document.getElementById('principalInput').disabled = false;
-                    document.getElementById('interestInput').disabled = false;
-                    return;
+                if (res.success) {
+                    const passbook = res.data.passbook;
+                    addSessionItem(principal + interest);
+                    refreshRecentTransactions();
+
+                    paymentState = AppState.SUCCESS;
+                    document.getElementById('pb-name').innerText = `ชื่อ: ${escapeHtml(selectedContract.fullName)} (รหัส: ${escapeHtml(selectedContract.memberNo)})`;
+                    document.getElementById('pb-date').innerText = escapeHtml(passbook.date);
+                    document.getElementById('pb-prin').innerText = Number(passbook.principal).toLocaleString('en-US');
+                    document.getElementById('pb-int').innerText = Number(passbook.interest).toLocaleString('en-US');
+                    document.getElementById('pb-bal').innerText = Number(passbook.balance).toLocaleString('en-US');
+                    document.getElementById('pb-note').innerText = escapeHtml(passbook.note);
+
+                    document.getElementById('passbook-modal').classList.remove('hidden');
+                    document.getElementById('passbook-modal').focus();
+                } else {
+                    if (res.message && res.message.includes('Session')) logout();
+                    else Swal.fire({ icon: 'error', title: 'บันทึกไม่สำเร็จ', text: res.message });
+                    resetPaymentUI();
                 }
-
-                addSessionItem(principal + interest);
-                refreshRecentTransactions();
-
-                paymentState = AppState.SUCCESS;
-                document.getElementById('pb-name').innerText = `ชื่อ: ${selectedContract.fullName} (รหัส: ${selectedContract.memberNo})`;
-                document.getElementById('pb-date').innerText = res.passbook.date;
-                document.getElementById('pb-prin').innerText = res.passbook.principal.toLocaleString('en-US');
-                document.getElementById('pb-int').innerText = res.passbook.interest.toLocaleString('en-US');
-                document.getElementById('pb-bal').innerText = res.passbook.balance.toLocaleString('en-US');
-                document.getElementById('pb-note').innerText = res.passbook.note;
-
-                document.getElementById('passbook-modal').classList.remove('hidden');
             })
             .withFailureHandler(err => {
                 isSubmitting = false;
                 closeLoading();
-                Toast.fire({ icon: 'error', title: 'ระบบผิดพลาด' });
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Server Error',
+                    text: err.message || 'Unexpected error'
+                });
                 resetPaymentUI();
             })
             .savePaymentTransaction(currentToken, payload);
@@ -826,7 +902,15 @@
 
         const div = document.createElement('div');
         div.className = 'flex justify-between border-b border-gray-100 pb-1 text-xs';
-        div.innerHTML = `<span>รายการที่ ${sessionItemsCount}</span><span class="font-bold text-gray-800">${amount.toLocaleString('en-US')}.-</span>`;
+
+        const span1 = document.createElement('span');
+        span1.textContent = 'รายการที่ ' + sessionItemsCount;
+        const span2 = document.createElement('span');
+        span2.className = 'font-bold text-gray-800';
+        span2.textContent = amount.toLocaleString('en-US') + '.-';
+
+        div.appendChild(span1);
+        div.appendChild(span2);
 
         const container = document.getElementById('session-items');
         container.appendChild(div);
@@ -846,24 +930,37 @@
         const tbody = document.getElementById('recent-transactions-tbody');
         tbody.innerHTML = '<tr><td colspan="6" class="py-4 text-gray-500">กำลังโหลดข้อมูล...</td></tr>';
 
-        google.script.run.withSuccessHandler(data => {
-            tbody.innerHTML = '';
-            if (data.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" class="py-4 text-gray-500">- ยังไม่มีประวัติการทำธุรกรรม -</td></tr>';
-                return;
+        google.script.run.withSuccessHandler(res => {
+            if (res.success && res.data) {
+                const data = res.data.transactions || [];
+                tbody.innerHTML = '';
+                if (data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" class="py-4 text-gray-500">- ยังไม่มีประวัติการทำธุรกรรม -</td></tr>';
+                    return;
+                }
+                data.forEach(row => {
+                    let tr = document.createElement('tr');
+                    tr.className = 'border-b hover:bg-gray-50 transition-colors';
+
+                    const td1 = document.createElement('td'); td1.className = "py-2 text-xs text-gray-500"; td1.textContent = row.time;
+                    const td2 = document.createElement('td'); td2.className = "py-2 font-medium"; td2.textContent = row.memberNo;
+                    const td3 = document.createElement('td'); td3.className = "py-2 text-left text-gray-800"; td3.textContent = row.name;
+                    const td4 = document.createElement('td'); td4.className = "py-2 text-blue-600"; td4.textContent = Number(row.principal).toLocaleString('en-US');
+                    const td5 = document.createElement('td'); td5.className = "py-2 text-red-600"; td5.textContent = Number(row.interest).toLocaleString('en-US');
+                    const td6 = document.createElement('td'); td6.className = "py-2 font-bold text-green-700"; td6.textContent = Number(row.total).toLocaleString('en-US');
+
+                    tr.appendChild(td1); tr.appendChild(td2); tr.appendChild(td3); tr.appendChild(td4); tr.appendChild(td5); tr.appendChild(td6);
+                    tbody.appendChild(tr);
+                });
+            } else {
+                tbody.innerHTML = '<tr><td colspan="6" class="py-4 text-red-500">โหลดข้อมูลไม่สำเร็จ</td></tr>';
             }
-            data.forEach(row => {
-                let tr = document.createElement('tr');
-                tr.className = 'border-b hover:bg-gray-50 transition-colors';
-                tr.innerHTML = `
-          <td class="py-2 text-xs text-gray-500">${row.time}</td>
-          <td class="py-2 font-medium">${row.memberNo}</td>
-          <td class="py-2 text-left text-gray-800">${row.name}</td>
-          <td class="py-2 text-blue-600">${Number(row.principal).toLocaleString('en-US')}</td>
-          <td class="py-2 text-red-600">${Number(row.interest).toLocaleString('en-US')}</td>
-          <td class="py-2 font-bold text-green-700">${Number(row.total).toLocaleString('en-US')}</td>
-        `;
-                tbody.appendChild(tr);
+        }).withFailureHandler(err => {
+            tbody.innerHTML = '<tr><td colspan="6" class="py-4 text-red-500">ระบบผิดพลาด</td></tr>';
+            Swal.fire({
+                icon: 'error',
+                title: 'Server Error',
+                text: err.message || 'Unexpected error'
             });
         }).getRecentTransactions(currentToken);
     }
@@ -885,13 +982,20 @@
         tbody.innerHTML = '<tr><td colspan="6" class="text-center py-10 opacity-50">กำลังโหลด...</td></tr>';
 
         google.script.run.withSuccessHandler(res => {
-            if (res.success) {
-                fullMemberData = res.members;
+            if (res.success && res.data) {
+                fullMemberData = res.data.members;
                 renderMemberDirectory(fullMemberData);
             } else {
                 if (res.message && res.message.includes('Session')) logout();
                 else Swal.fire('ผิดพลาด', res.message, 'error');
             }
+        }).withFailureHandler(err => {
+            document.getElementById('member-directory-tbody').innerHTML = '<tr><td colspan="6" class="text-center py-10 text-red-500">ติดต่อเซิร์ฟเวอร์ไม่ได้</td></tr>';
+            Swal.fire({
+                icon: 'error',
+                title: 'Server Error',
+                text: err.message || 'Unexpected error'
+            });
         }).getStaffMemberDirectory(currentToken);
     }
 
@@ -913,23 +1017,27 @@
                 document.getElementById('memberNoInput').value = m.memberNo;
                 triggerSearchMemberManual(m.memberNo);
             };
-            tr.innerHTML = `
-                <td class="px-4 py-3 font-bold text-gray-700">${m.memberNo}</td>
-                <td class="px-4 py-3 text-gray-800 group-hover:text-orange-700 font-medium">${m.fullName}</td>
-                <td class="px-4 py-3 text-sm text-gray-500 font-mono">${m.contractNo}</td>
-                <td class="px-4 py-3 text-right text-gray-600">${Number(m.loanAmount).toLocaleString()}</td>
-                <td class="px-4 py-3 text-right font-bold text-blue-600">${Number(m.balance).toLocaleString()}</td>
-                <td class="px-4 py-3 text-center">
-                    <span class="px-2 py-0.5 rounded-full text-xs font-bold ${m.status === 'Active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}">${m.status}</span>
-                </td>
-            `;
+
+            const td1 = document.createElement('td'); td1.className = "px-4 py-3 font-bold text-gray-700"; td1.textContent = m.memberNo;
+            const td2 = document.createElement('td'); td2.className = "px-4 py-3 text-gray-800 group-hover:text-orange-700 font-medium"; td2.textContent = m.fullName;
+            const td3 = document.createElement('td'); td3.className = "px-4 py-3 text-sm text-gray-500 font-mono"; td3.textContent = m.contractNo;
+            const td4 = document.createElement('td'); td4.className = "px-4 py-3 text-right text-gray-600"; td4.textContent = Number(m.loanAmount).toLocaleString();
+            const td5 = document.createElement('td'); td5.className = "px-4 py-3 text-right font-bold text-blue-600"; td5.textContent = Number(m.balance).toLocaleString();
+            const td6 = document.createElement('td'); td6.className = "px-4 py-3 text-center";
+
+            const spanState = document.createElement('span');
+            spanState.className = `px-2 py-0.5 rounded-full text-xs font-bold ${m.status === 'Active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`;
+            spanState.textContent = m.status;
+            td6.appendChild(spanState);
+
+            tr.appendChild(td1); tr.appendChild(td2); tr.appendChild(td3); tr.appendChild(td4); tr.appendChild(td5); tr.appendChild(td6);
             tbody.appendChild(tr);
         });
     }
 
     // Helper for directory selection
     function triggerSearchMemberManual(no) {
-        paymentState = "SEARCH";
+        paymentState = AppState.SEARCH;
         searchMember();
     }
 
